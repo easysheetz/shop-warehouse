@@ -1,0 +1,29 @@
+# Sprawdzenia przed każdym commitem:  pre-commit install   (jednorazowo w repozytorium)
+# Ręcznie na wszystkich plikach:      pre-commit run --all-files
+# Aktualizacja wersji hooków:         pre-commit autoupdate
+# zewnętrzne biblioteki zostawiamy bez zmian
+exclude: ^static/vendor/
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks            # blokuje commit z kluczem API, tokenem, hasłem
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]

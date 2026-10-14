@@ -1,0 +1,42 @@
+# Środowisko deweloperskie:  docker compose up --build
+# Aplikacja: http://localhost:8000   Baza: localhost:5432 (użytkownik/hasło/baza: skaner – tylko lokalnie)
+# Zmiany w kodzie (app/, static/) widać od razu – serwer przeładowuje się sam.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: skaner
+      POSTGRES_PASSWORD: skaner
+      POSTGRES_DB: skaner
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skaner"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://skaner:skaner@db:5432/skaner
+      RUN_MIGRATIONS: "true"
+    command: ["--reload", "--reload-dir", "app", "--reload-dir", "static"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./static:/app/static
+      - ./migrations:/app/migrations
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

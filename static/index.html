@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f6f54">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Skaner zakupów</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Logowanie -->
+  <section id="login" class="login hidden">
+    <div class="logo"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14M7 5v14M11 5v14M14 5v14M18 5v14M21 5v14"/></svg></div>
+    <h1>Skaner zakupów</h1>
+    <p class="muted">Wybierz swoje imię i wpisz PIN.</p>
+    <div class="names" id="login-names"></div>
+    <input type="text" id="login-name" placeholder="Imię" autocomplete="username" class="hidden">
+    <div class="pin-dots" id="pin-dots"></div>
+    <div class="pin-pad" id="pin-pad"></div>
+    <p id="login-error" class="small" style="color:var(--bad);text-align:center;min-height:20px"></p>
+  </section>
+
+  <!-- Aplikacja -->
+  <section id="app" class="hidden">
+    <div class="top">
+      <header class="topbar">
+        <h1 id="title">Zakup</h1>
+        <span id="user-name" class="user-name"></span>
+      </header>
+      <div id="netbar" class="hidden" role="alert">
+        <span>Brak połączenia z internetem – skany nie są zapisywane</span>
+        <button type="button" id="netbar-retry">Sprawdź</button>
+      </div>
+    </div>
+    <main id="view"></main>
+    <nav class="tabs" id="tabs"></nav>
+  </section>
+
+  <!-- Kamera -->
+  <div id="camera" class="hidden">
+    <div class="cam-head"><b>Skieruj aparat na kod kreskowy</b><button class="btn sm" id="cam-close">Zamknij</button></div>
+    <div id="reader"></div>
+    <div class="cam-foot"><div class="cam-last" id="cam-last"></div><div id="cam-hint">Kod zostanie dodany automatycznie</div></div>
+  </div>
+
+  <dialog id="dlg"></dialog>
+  <div id="toast" class="hidden"></div>
+
+  <script src="/static/vendor/html5-qrcode.min.js"></script>
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

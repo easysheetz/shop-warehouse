@@ -1,0 +1,25 @@
+[project]
+name = "skaner-magazyn"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
+ignore = [
+    "S101",   # assert w testach
+    "S104",   # nasłuch na 0.0.0.0 w kontenerze jest zamierzony
+    "B008",   # Depends() w argumentach to wzorzec FastAPI
+    "UP007",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning:starlette.*"]

@@ -1,0 +1,39 @@
+# Sekrety – nigdy w repozytorium
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+*-sa-key.json
+
+# Terraform (stan i dane logowania)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# Bazy danych i kopie
+*.db
+*.sqlite3
+*.dump
+*.sql.gz
+backups/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Edytory i system
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

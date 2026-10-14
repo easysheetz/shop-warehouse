@@ -1,0 +1,5 @@
+# Linuksowe końce linii dla całego kodu – także gdy ktoś edytuje pliki w Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

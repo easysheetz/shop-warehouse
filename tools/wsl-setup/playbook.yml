@@ -1,0 +1,353 @@
+---
+# Konfiguracja środowiska deweloperskiego w WSL (Ubuntu 24.04) dla projektu skaner-magazyn.
+# Uruchomienie: ./bootstrap.sh   (albo: ansible-playbook playbook.yml -K)
+# Playbook można uruchamiać wielokrotnie – zmienia tylko to, czego jeszcze brakuje.
+
+- name: Środowisko deweloperskie WSL
+  hosts: local
+  gather_facts: true
+
+  vars_prompt:
+    - name: git_user_name
+      prompt: "Imię i nazwisko do commitów w Git (Enter = pomiń)"
+      private: false
+      default: ""
+    - name: git_user_email
+      prompt: "E-mail do commitów w Git, np. adres noreply z GitHuba (Enter = pomiń)"
+      private: false
+      default: ""
+
+  vars:
+    projects_dir: "{{ ansible_user_dir }}/projekty"
+    keyrings_dir: /etc/apt/keyrings
+
+    base_packages:
+      - git
+      - curl
+      - wget
+      - ca-certificates
+      - gnupg
+      - unzip
+      - zip
+      - jq
+      - make
+      - build-essential
+      - tree
+      - htop
+      - bash-completion
+
+    python_packages:
+      - python3
+      - python3-venv
+      - python3-pip
+      - python3-dev
+      - pipx
+
+    # psql do podglądu lokalnej bazy w Dockerze; libpq-dev na wypadek budowania sterownika PostgreSQL
+    database_packages:
+      - postgresql-client
+      - libpq-dev
+
+    pipx_tools:
+      - pre-commit   # uruchamia skaner sekretów (gitleaks) i sprawdzanie kodu przed commitem
+
+    git_settings:
+      init.defaultBranch: main
+      core.autocrlf: input        # w repozytorium zawsze linuksowe końce linii
+      core.editor: "code --wait"
+      pull.ff: only
+      fetch.prune: "true"
+      push.autoSetupRemote: "true"
+
+  pre_tasks:
+    - name: Sprawdź system
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version is version("22.04", ">=")
+        fail_msg: "Playbook jest przygotowany dla Ubuntu 22.04 lub nowszego (zalecane 24.04)."
+      tags: always
+
+    - name: Czy to WSL
+      ansible.builtin.set_fact:
+        is_wsl: "{{ 'microsoft' in ansible_kernel | lower }}"
+      tags: always
+
+    - name: Ostrzeż, jeśli to nie jest WSL
+      ansible.builtin.debug:
+        msg: "Uwaga: nie wykryto WSL – playbook zadziała, ale był pisany pod WSL (pominie integrację z Windows)."
+      when: not is_wsl
+      tags: always
+
+  tasks:
+    # ------------------------------------------------------------ pakiety systemowe
+    - name: Aktualizacja listy pakietów
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+      tags: [apt]
+
+    - name: Pakiety podstawowe, Python i klient PostgreSQL
+      ansible.builtin.apt:
+        name: "{{ base_packages + python_packages + database_packages }}"
+        state: present
+      become: true
+      tags: [apt]
+
+    - name: Katalog na klucze repozytoriów apt
+      ansible.builtin.file:
+        path: "{{ keyrings_dir }}"
+        state: directory
+        mode: "0755"
+      become: true
+      tags: [github_cli, gcloud, terraform]
+
+    # ------------------------------------------------------------ GitHub CLI (gh)
+    - name: Klucz repozytorium GitHub CLI
+      ansible.builtin.get_url:
+        url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+        dest: "{{ keyrings_dir }}/githubcli-archive-keyring.gpg"
+        mode: "0644"
+      become: true
+      tags: [github_cli]
+
+    - name: Repozytorium GitHub CLI
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}
+          signed-by={{ keyrings_dir }}/githubcli-archive-keyring.gpg]
+          https://cli.github.com/packages stable main
+        filename: github-cli
+        state: present
+      become: true
+      tags: [github_cli]
+
+    - name: GitHub CLI
+      ansible.builtin.apt:
+        name: gh
+        state: present
+        update_cache: true
+      become: true
+      tags: [github_cli]
+
+    # ------------------------------------------------------------ Google Cloud CLI (gcloud)
+    - name: Klucz repozytorium Google Cloud
+      ansible.builtin.shell: >
+        set -o pipefail &&
+        curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        | gpg --dearmor -o {{ keyrings_dir }}/cloud.google.gpg
+      args:
+        executable: /bin/bash
+        creates: "{{ keyrings_dir }}/cloud.google.gpg"
+      become: true
+      tags: [gcloud]
+
+    - name: Repozytorium Google Cloud CLI
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [signed-by={{ keyrings_dir }}/cloud.google.gpg]
+          https://packages.cloud.google.com/apt cloud-sdk main
+        filename: google-cloud-sdk
+        state: present
+      become: true
+      tags: [gcloud]
+
+    - name: Google Cloud CLI
+      ansible.builtin.apt:
+        name: google-cloud-cli
+        state: present
+        update_cache: true
+      become: true
+      tags: [gcloud]
+
+    # ------------------------------------------------------------ Terraform (HashiCorp)
+    - name: Klucz repozytorium HashiCorp
+      ansible.builtin.shell: >
+        set -o pipefail &&
+        curl -fsSL https://apt.releases.hashicorp.com/gpg
+        | gpg --dearmor -o {{ keyrings_dir }}/hashicorp-archive-keyring.gpg
+      args:
+        executable: /bin/bash
+        creates: "{{ keyrings_dir }}/hashicorp-archive-keyring.gpg"
+      become: true
+      tags: [terraform]
+
+    - name: Repozytorium HashiCorp
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}
+          signed-by={{ keyrings_dir }}/hashicorp-archive-keyring.gpg]
+          https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main
+        filename: hashicorp
+        state: present
+      become: true
+      tags: [terraform]
+
+    - name: Terraform
+      ansible.builtin.apt:
+        name: terraform
+        state: present
+        update_cache: true
+      become: true
+      tags: [terraform]
+
+    - name: Podpowiadanie poleceń Terraform w bashu
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_user_dir }}/.bashrc"
+        line: "complete -C /usr/bin/terraform terraform"
+        create: true
+        mode: "0644"
+      tags: [terraform]
+
+    # ------------------------------------------------------------ narzędzia użytkownika (bez sudo)
+    - name: Katalog ~/.local/bin w PATH
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_user_dir }}/.bashrc"
+        line: 'export PATH="$HOME/.local/bin:$PATH"'
+        regexp: '^export PATH="\$HOME/\.local/bin:\$PATH"$'
+        create: true
+        mode: "0644"
+      tags: [tools]
+
+    - name: Narzędzia Pythona przez pipx
+      community.general.pipx:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ pipx_tools }}"
+      environment:
+        PATH: "{{ ansible_user_dir }}/.local/bin:{{ ansible_env.PATH }}"
+      tags: [tools]
+
+    - name: Katalog na projekty
+      ansible.builtin.file:
+        path: "{{ projects_dir }}"
+        state: directory
+        mode: "0755"
+      tags: [tools]
+
+    # ------------------------------------------------------------ integracja z Windows (tylko WSL)
+    - name: Pakiet wslu – otwieranie linków w przeglądarce Windowsa (wslview)
+      ansible.builtin.apt:
+        name: wslu
+        state: present
+      become: true
+      when: is_wsl
+      tags: [windows]
+
+    - name: Ścieżka do folderu użytkownika Windows
+      ansible.builtin.shell: |
+        set -o pipefail
+        cd /mnt/c && wslpath "$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')"
+      args:
+        executable: /bin/bash
+      register: win_profile
+      changed_when: false
+      failed_when: false
+      when: is_wsl
+      tags: [windows]
+
+    - name: Sprawdź, czy ~/pobrane już istnieje
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/pobrane"
+        follow: false
+      register: pobrane_stat
+      when: is_wsl
+      tags: [windows]
+
+    - name: Skrót ~/pobrane do folderu Pobrane w Windows
+      ansible.builtin.file:
+        src: "{{ win_profile.stdout }}/Downloads"
+        dest: "{{ ansible_user_dir }}/pobrane"
+        state: link
+        follow: false
+      when:
+        - is_wsl
+        - win_profile.rc == 0
+        - win_profile.stdout | length > 0
+        - not pobrane_stat.stat.exists
+      tags: [windows]
+
+    # ------------------------------------------------------------ Git
+    - name: Ustawienia Gita
+      community.general.git_config:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        scope: global
+      loop: "{{ git_settings | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      tags: [git]
+
+    - name: Imię i nazwisko w Git
+      community.general.git_config:
+        name: user.name
+        value: "{{ git_user_name }}"
+        scope: global
+      when: git_user_name | length > 0
+      tags: [git]
+
+    - name: E-mail w Git
+      community.general.git_config:
+        name: user.email
+        value: "{{ git_user_email }}"
+        scope: global
+      when: git_user_email | length > 0
+      tags: [git]
+
+  post_tasks:
+    # ------------------------------------------------------------ sprawdzenie i podsumowanie
+    - name: Sprawdź Dockera (z Docker Desktop)
+      ansible.builtin.command: docker version --format "{{ '{{' }}.Server.Version{{ '}}' }}"
+      register: docker_check
+      changed_when: false
+      failed_when: false
+      tags: always
+
+    - name: Sprawdź docker compose
+      ansible.builtin.command: docker compose version --short
+      register: compose_check
+      changed_when: false
+      failed_when: false
+      tags: always
+
+    - name: Sprawdź logowanie GitHub CLI
+      ansible.builtin.command: gh auth status
+      register: gh_check
+      changed_when: false
+      failed_when: false
+      tags: always
+
+    - name: Wersje zainstalowanych narzędzi
+      ansible.builtin.shell: |
+        set -o pipefail
+        export PATH="$HOME/.local/bin:$PATH"
+        for c in "git --version" "python3 --version" "pipx --version" "pre-commit --version" \
+                 "psql --version" "gh --version" "gcloud --version" "terraform version"; do
+          out=$($c 2>/dev/null | head -1) || out=""
+          printf '%-22s %s\n' "${c%% *}" "${out:-BRAK}"
+        done
+      args:
+        executable: /bin/bash
+      register: versions
+      changed_when: false
+      tags: always
+
+    - name: Podsumowanie
+      ansible.builtin.debug:
+        msg: "{{ versions.stdout_lines + summary }}"
+      vars:
+        distro: "{{ ansible_env.WSL_DISTRO_NAME | default('Ubuntu') }}"
+        pobrane_ok: "{{ (ansible_user_dir ~ '/pobrane') is exists }}"
+        pobrane_yes: "Pobrane z Windows: ~/pobrane"
+        pobrane_no: "Skrót ~/pobrane: nie utworzono (ręcznie: ln -s /mnt/c/Users/<NAZWA>/Downloads ~/pobrane)"
+        docker_fix: "włącz w Docker Desktop: Settings > Resources > WSL integration > {{ distro }}"
+        summary:
+          - "-----"
+          - "{{ 'Docker: OK (' ~ docker_check.stdout ~ ')' if docker_check.rc == 0 else 'Docker: NIE DZIAŁA – ' ~ docker_fix }}"
+          - "{{ 'docker compose: OK (' ~ compose_check.stdout ~ ')' if compose_check.rc == 0 else 'docker compose: BRAK – ' ~ docker_fix }}"
+          - "{{ 'GitHub: zalogowany' if gh_check.rc == 0 else 'GitHub: wykonaj teraz  gh auth login  a potem  gh auth setup-git' }}"
+          - "Google Cloud: przed fazą 2 wykonaj  gcloud init  oraz  gcloud auth application-default login  (logowanie dla Terraform)"
+          - "{{ (pobrane_yes if pobrane_ok else pobrane_no) if is_wsl else 'Integracja z Windows: pominięta (to nie WSL)' }}"
+          - "Otwórz nowy terminal (albo: source ~/.bashrc), żeby odświeżyć PATH."
+      tags: always
